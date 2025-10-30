@@ -24,6 +24,7 @@ jobs:
             "https://pdfxpert-api.onrender.com/health/"
             "https://tokload-api-qx32.onrender.com/health/"
             "https://tokload-api-qx32.onrender.com/seo/"
+            "https://smart-garden-002v.onrender.com/"
           )
           for URL in "${HEALTH_URLS[@]}"; do
             echo "---- $URL"
