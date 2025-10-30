@@ -1,0 +1,48 @@
+name: Keep Render Alive
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # ping health
+    - cron: "0 12 * * *"     # /stats 1×/jour (12:00 UTC)
+  workflow_dispatch: {}
+
+# Empêche deux runs de se marcher dessus
+concurrency:
+  group: keep-render-alive
+  cancel-in-progress: true
+
+jobs:
+  keep-alive:
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/10 * * * *')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoints (3 tentatives)
+        run: |
+          HEALTH_URLS=(
+            "https://everything-z98m.onrender.com/health/"
+            "https://labubu-bot-3v9p.onrender.com"
+            "https://pdfxpert-api.onrender.com/health/"
+            "https://tokload-api-qx32.onrender.com/health/"
+            "https://tokload-api-qx32.onrender.com/seo/"
+          )
+          for URL in "${HEALTH_URLS[@]}"; do
+            echo "---- $URL"
+            for i in 1 2 3; do
+              if curl --fail --silent --show-error --max-time 90 "$URL" > /dev/null; then
+                echo "OK"; break
+              fi
+              echo "retry in 10s"; sleep 10
+            done
+          done
+
+  daily-stats:
+    # Ne tourne QUE sur le cron "0 12 * * *"
+    if: github.event_name == 'schedule' && github.event.schedule == '0 12 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call /stats once (no retries)
+        run: |
+          URL="https://everything-z98m.onrender.com/stats/"
+          echo "Calling $URL (single shot)"
+          curl --fail --silent --show-error --max-time 120 "$URL" > /dev/null
+          echo "Done"
