@@ -3,7 +3,7 @@ name: Keep Render Alive
 on:
   schedule:
     - cron: "*/6 * * * *"   # ping health
-    - cron: "0 12 * * *"     # /stats 1×/jour (12:00 UTC)
+    - cron: "0 12 * * *"    # /stats 1×/jour (12:00 UTC)
   workflow_dispatch: {}
 
 # Empêche deux runs de se marcher dessus
@@ -13,10 +13,10 @@ concurrency:
 
 jobs:
   keep-alive:
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'schedule' && github.event.schedule == '*/10 * * * *')
+    # Tourne pour tous les crons + lancement manuel
     runs-on: ubuntu-latest
     steps:
-      - name: Ping health endpoints (3 tentatives)
+      - name: Ping health endpoints (3 tentatives avec retries)
         run: |
           HEALTH_URLS=(
             "https://everything-z98m.onrender.com/health/"
@@ -26,15 +26,33 @@ jobs:
             "https://tokload-api-qx32.onrender.com/seo/"
             "https://smart-garden-002v.onrender.com/"
           )
+
+          failed=0
+
           for URL in "${HEALTH_URLS[@]}"; do
             echo "---- $URL"
+            success=0
+
             for i in 1 2 3; do
               if curl --fail --silent --show-error --max-time 90 "$URL" > /dev/null; then
-                echo "OK"; break
+                echo "OK"
+                success=1
+                break
               fi
-              echo "retry in 10s"; sleep 10
+              echo "retry in 10s ($i/3)"
+              sleep 10
             done
+
+            if [ "$success" -ne 1 ]; then
+              echo "Échec après 3 tentatives pour $URL"
+              failed=1
+            fi
           done
+
+          if [ "$failed" -ne 0 ]; then
+            echo "Au moins un endpoint n'a pas répondu correctement."
+            exit 1
+          fi
 
   daily-stats:
     # Ne tourne QUE sur le cron "0 12 * * *"
