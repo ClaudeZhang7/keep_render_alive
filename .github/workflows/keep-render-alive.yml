@@ -6,7 +6,6 @@ on:
     - cron: "0 12 * * *"    # /stats 1×/jour (12:00 UTC)
   workflow_dispatch: {}
 
-# Empêche deux runs de se marcher dessus
 concurrency:
   group: keep-render-alive
   cancel-in-progress: true
@@ -15,7 +14,7 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping health endpoints (ignore failures per URL)
+      - name: Ping health endpoints (ignore failures)
         run: |
           HEALTH_URLS=(
             "https://everything-z98m.onrender.com/health/"
@@ -47,7 +46,6 @@ jobs:
           done
 
   daily-stats:
-    # Ne tourne QUE sur le cron "0 12 * * *"
     if: github.event_name == 'schedule' && github.event.schedule == '0 12 * * *'
     runs-on: ubuntu-latest
     steps:
