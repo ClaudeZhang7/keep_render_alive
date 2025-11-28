@@ -8,7 +8,7 @@ on:
 
 concurrency:
   group: keep-render-alive
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   keep-alive:
