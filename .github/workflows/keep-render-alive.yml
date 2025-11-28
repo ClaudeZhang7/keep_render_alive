@@ -2,56 +2,92 @@ name: Keep Render Alive
 
 on:
   schedule:
-    - cron: "*/6 * * * *"   # ping health
-    - cron: "0 12 * * *"    # /stats 1×/jour (12:00 UTC)
+    # Plusieurs schedules pour augmenter les chances de déclenchement
+    - cron: "*/6 * * * *"
+    - cron: "*/7 * * * *"
+    - cron: "*/11 * * * *"
+    # /stats 1×/jour (12:00 UTC)
+    - cron: "0 12 * * *"
   workflow_dispatch: {}
 
 concurrency:
   group: keep-render-alive
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   keep-alive:
+    # Ne pas lancer keep-alive sur le cron daily-stats (on évite un run doublon)
+    if: github.event_name != 'schedule' || github.event.schedule != '0 12 * * *'
     runs-on: ubuntu-latest
+    timeout-minutes: 70
     steps:
-      - name: Ping health endpoints (ignore failures)
+      - name: Ping endpoints repeatedly (best-effort keep awake)
+        shell: bash
         run: |
+          set +e
+
+          # Ré-essaye pendant ~55 minutes, ping toutes les 5 minutes.
+          TOTAL_MINUTES=55
+          INTERVAL_SECONDS=300
+          LOOPS=$(( (TOTAL_MINUTES*60) / INTERVAL_SECONDS ))
+
           HEALTH_URLS=(
+            # Mets l'app la plus importante en premier
+            "https://smart-garden-002v.onrender.com/health/"
+            "https://smart-garden-002v.onrender.com/"
             "https://everything-z98m.onrender.com/health/"
-            "https://labubu-bot-3v9p.onrender.com"
+            "https://labubu-bot-3v9p.onrender.com/"
             "https://pdfxpert-api.onrender.com/health/"
             "https://tokload-api-qx32.onrender.com/health/"
             "https://tokload-api-qx32.onrender.com/seo/"
-            "https://smart-garden-002v.onrender.com/"
           )
 
-          for URL in "${HEALTH_URLS[@]}"; do
-            echo "---- $URL"
-            success=0
+          ping_once () {
+            local URL="$1"
+            # -L suit les redirects, connect timeout court, max-time raisonnable
+            curl -L --silent --show-error \
+              --connect-timeout 10 --max-time 25 \
+              -o /dev/null -w "HTTP=%{http_code} time=%{time_total}s\n" \
+              "$URL"
+          }
 
-            for i in 1 2 3; do
-              # pas de --fail : n'importe quelle réponse réveille Render
-              if curl --silent --show-error --max-time 90 "$URL" > /dev/null; then
-                echo "OK (réponse reçue)"
-                success=1
-                break
+          for n in $(seq 1 "$LOOPS"); do
+            echo "===== Keep-alive round $n/$LOOPS ($(date -u)) ====="
+            for URL in "${HEALTH_URLS[@]}"; do
+              echo "---- $URL"
+              ok=0
+              for i in 1 2 3; do
+                out="$(ping_once "$URL")"
+                echo "$out"
+                # considère “réponse reçue” si code HTTP != 000 (000 = pas de réponse réseau)
+                code="$(echo "$out" | sed -n 's/.*HTTP=\([0-9]\+\).*/\1/p')"
+                if [ -n "$code" ] && [ "$code" != "000" ]; then
+                  ok=1
+                  break
+                fi
+                echo "retry in 10s ($i/3)"
+                sleep 10
+              done
+
+              if [ "$ok" -ne 1 ]; then
+                echo "⚠ Impossible de joindre $URL après 3 tentatives"
               fi
-              echo "retry in 10s ($i/3)"
-              sleep 10
             done
-
-            if [ "$success" -ne 1 ]; then
-              echo "⚠ Impossible de joindre $URL après 3 tentatives (on ignore et on continue)"
+            # Pas de sleep après le dernier tour
+            if [ "$n" -lt "$LOOPS" ]; then
+              echo "Sleep ${INTERVAL_SECONDS}s..."
+              sleep "$INTERVAL_SECONDS"
             fi
           done
 
   daily-stats:
     if: github.event_name == 'schedule' && github.event.schedule == '0 12 * * *'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Call /stats once (no retries)
         run: |
           URL="https://everything-z98m.onrender.com/stats/"
           echo "Calling $URL (single shot)"
-          curl --fail --silent --show-error --max-time 120 "$URL" > /dev/null
+          curl -L --fail --silent --show-error --max-time 60 "$URL" > /dev/null
           echo "Done"
