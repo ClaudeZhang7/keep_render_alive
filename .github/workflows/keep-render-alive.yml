@@ -33,13 +33,12 @@ jobs:
 
           HEALTH_URLS=(
             # Mets l'app la plus importante en premier
-            "https://smart-garden-002v.onrender.com/health/"
+            "https://tokload-api-qx32.onrender.com/health/"
+            "https://tokload-api-qx32.onrender.com/seo/"
+            "https://pdfxpert-api.onrender.com/health/"
             "https://smart-garden-002v.onrender.com/"
             "https://everything-z98m.onrender.com/health/"
             "https://labubu-bot-3v9p.onrender.com/"
-            "https://pdfxpert-api.onrender.com/health/"
-            "https://tokload-api-qx32.onrender.com/health/"
-            "https://tokload-api-qx32.onrender.com/seo/"
           )
 
           ping_once () {
